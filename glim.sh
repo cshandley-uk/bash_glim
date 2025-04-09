@@ -3,6 +3,13 @@
 # BASH. It's what I know best, sorry.
 #
 
+# Configure if we need to check PartOrder.
+# This choice is arbitrary and doesn't affect functionality of GLIM.
+# Non strict order might be beneficial when having general use FAT32/ExFat partition
+# for sharing files with Android/Windows as those OSs expect the first partition to be mountable.
+# In that case, other partitions can precede GLIM and GLIMISO partitions.
+CHECK_ORDER="false"
+
 # Check that we are *NOT* running as root
 if [[ `id -u` -eq 0 ]]; then
   echo "ERROR: Don't run as root, use a user with full sudo access."
@@ -51,7 +58,7 @@ fi
 echo "Found partition with label 'GLIM' : ${USBDEV1}"
 
 # Sanity check : our partition is the first one on the block device
-USBDEV="${USBDEV1/%[0-9]/}"		# This will fail if there are more than 9 partitions on the device, but seems unlikely & will work with NVMe partitions like /dev/nvme0n1p2
+USBDEV="${USBDEV1/%[0-9]/}"		# This will fail if there are more than 10 partitions on the device, but seems unlikely & will work with NVMe partitions like /dev/nvme0n1p2
 if [[ ! -b "$USBDEV" ]]; then
   echo "ERROR: ${USBDEV} block device not found."
   exit 1
@@ -59,12 +66,12 @@ fi
 echo "Running fdisk -l ${USBDEV} (with sudo) ..."
 FDisk="$(sudo fdisk -l ${USBDEV})"
 mapfile -t PartOrder < <(echo "$FDisk" | grep -E ^${USBDEV} | sort -nk2,2 | awk '{ print $1 }')
-if [[ "${USBDEV1}" != "${PartOrder[0]}" ]]; then
+if [[ "${CHECK_ORDER}" == "true"  ]] && [[ "${USBDEV1}" != "${PartOrder[0]}" ]]; then
   echo "ERROR: $USBDEV1 is not the first partition on the block device."
   exit 1
 fi
 echo "Found block device where to install GRUB2 : ${USBDEV}"
-if [[ `ls -1 ${USBDEV}* | wc -l` -gt 3 ]]; then
+if [[ "${CHECK_ORDER}" == "true"  ]] && [[ `ls -1 ${USBDEV}* | wc -l` -gt 3 ]]; then
   echo "WARNING: There are more than two partitions on ${USBDEV}"
 fi
 
@@ -76,7 +83,7 @@ elif [[ "$(echo "$USBDEV2" | wc -l)" -gt 1 ]]; then
   echo "ERROR: multiple partitions found with label 'GLIMISO', please disconnect/rename the unwanted ones."
   exit 1
 else
-  if [[ "$USBDEV2" != "${PartOrder[1]}" ]]; then
+  if [[ "${CHECK_ORDER}" == "true"  ]] && [[ "$USBDEV2" != "${PartOrder[1]}" ]]; then
     USBDEV2=""
     echo "WARNING: Ignored 'GLIMISO' partition ${USBDEV2} because it is not the second partition on the block device."
   else
@@ -127,7 +134,7 @@ PartType="$(echo "$FDisk" | grep -iPo "Disklabel type:\s\K.*")"
 if [[ $? -ne 0 ]]; then
   PartType="dos"	# Error, so assume the best case so don't give spurious warnings
 elif [[ "$PartType" == "gpt" ]]; then
-  echo "The ${USBDEV} block device uses GPT, which means you can only install for EFI (not BIOS) unless it has a 1MB BIOS Boot partition for Grub.  GLIM needs this after the GLIMISO partition (if there is one)."
+  echo -e "The ${USBDEV} block device uses GPT, which means you can only install for EFI (not BIOS) unless it has a 1MB BIOS Boot partition for Grub.\nGLIM needs this after the GLIMISO partition (if there is one)."
 else
   PartType="dos"	# Ensure script behaves sensibly if fdisk doesn't output "gpt" or "dos"
   echo "The ${USBDEV} block device uses MBR, which means Grub can install for both EFI & BIOS."
@@ -171,7 +178,6 @@ if [[ $EFI == true && ! -d /usr/lib/grub/x86_64-efi ]]; then
   fi
 fi
 
-
 #
 # Get serious. If we get here, things are looking sane
 #
@@ -197,7 +203,7 @@ if [[ $BIOS == true ]]; then
   fi
 fi
 if [[ $EFI == true ]]; then
-  GRUB_TARGET="--target=x86_64-efi --removable"
+  GRUB_TARGET="--target=x86_64-efi --removable --no-nvram"
   echo "Running ${GRUB2_INSTALL} ${GRUB_TARGET} --efi-directory '${USBMNT}' --boot-directory '${USBMNT}/boot' ${USBDEV} (with sudo) ..."
   sudo          ${GRUB2_INSTALL} ${GRUB_TARGET} --efi-directory "${USBMNT}" --boot-directory "${USBMNT}/boot" ${USBDEV}
   if [[ $? -ne 0 ]]; then
@@ -232,22 +238,21 @@ fi
 
 # Be nice and pre-create the directory, and mention it
 if [[ ! -d "${USBMNTISO}/iso" ]]; then
-	${ISOCMD_PREFIX} mkdir -p "${USBMNTISO}/iso"
-    if [ -n "$ISOCMD_CHOWN" ]; then $ISOCMD_CHOWN "${USBMNTISO}/iso"; fi
+  ${ISOCMD_PREFIX} mkdir -p "${USBMNTISO}/iso"
+  if [ -n "$ISOCMD_CHOWN" ]; then $ISOCMD_CHOWN "${USBMNTISO}/iso"; fi
 fi
 echo "GLIM installed! Time to populate the '${USBMNTISO}/iso' sub-directories."
 
-# Now also pre-create all supported sub-directories since empty are ignored
-args=(
-  -E -n
-  '/\(distro-list-start\)/,/\(distro-list-end\)/{s,^\* \[`([a-z0-9]+)`\].*$,\1,p}'
-)
-
-for DIR in $(sed "${args[@]}" "$(dirname "$0")"/README.md); do
+echo -e "Pre-creating sub-directories for non-uniquely named ISOs.\nAll other ISOs are expected to reside directly in '${USBMNTISO}/iso'"
+for DIR in openbsd calculate; do
   if [[ ! -d "${USBMNTISO}/iso/${DIR}" ]]; then
-    ${ISOCMD_PREFIX} mkdir -p "${USBMNTISO}/iso/${DIR}"
+    ${ISOCMD_PREFIX} mkdir -pv "${USBMNTISO}/iso/${DIR}"
     if [ -n "$ISOCMD_CHOWN" ]; then $ISOCMD_CHOWN "${USBMNTISO}/iso/${DIR}"; fi
   fi
 done
+
+echo "Copying readme to ${USBMNTISO} and ${USBMNT}"
+cp -v "$(dirname ${0})/README.md" "${USBMNT}/glim-readme.txt"
+[[ -d "${USBMNTISO}" ]] && cp -v "$(dirname ${0})/README.md" "${USBMNTISO}/iso/glim-readme.txt"
 
 echo "Finished!"

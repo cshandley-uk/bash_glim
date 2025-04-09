@@ -5,11 +5,16 @@ https://github.com/thias/glim | http://glee.thias.es/GLIM
 
 
 Overview
---------
+---
 
-GLIM is a set of grub configuration files to turn a simple VFAT or FAT32 
-formatted USB memory stick containing many GNU/Linux distribution ISO images 
-into a neat device from which many different Live environments can be used.
+GLIM "[G]RUB2 [L]ive [I]SO [M]ultiboot" is a set of grub configuration files
+to turn USB memory stick containing GNU/Linux, *BSD and Windows ISO images
+into a neat device from which many different Live environments
+and Installation media can be used.
+
+GLIM is a more basic but completely open source alternative to Ventoy.
+In fact, GLIM only provides basic GRUB scripts and GRUB configuations.
+Runtime binaries are simply copied from GRUB2 instance of the host.
 
 Advantages over extracting files or using special Live USB creation tools :
 
@@ -26,30 +31,32 @@ As modern Linux ISOs often exceed the 4GB file size limit of FAT32, GLIM now
 supports a second partition using other filesystems supported by GRUB2, such as 
 ext3/ext4, NTFS or exFAT - but the distribution must also support booting from 
 it, which isn't the case for many with NTFS (Ubuntu does, Fedora doesn't) and 
-exFAT (Ubuntu doesn't, Fedora does).  Ext4 is a safe bet for the second 
-partition.
+exFAT (Ubuntu doesn't, Fedora does). Ext4 is a safe bet for the second partition.
 
 
 Screenshots
------------
+---
 
 ![Main Menu](https://github.com/thias/glim/raw/master/screenshots/GLIM-3.0-shot1.png)
 ![Ubuntu Submenu](https://github.com/thias/glim/raw/master/screenshots/GLIM-3.0-shot2.png)
 
 
 Recent changes
---------------
+---
 
 * GLIM now easily supports ISO files >4GB through the use of a second partition,
 although you can still use a single partition if you want.
 
-* The ISO folder has been moved from `boot/iso/` to just `iso/`, so that it's 
-easier to find, and also is in the same location whether you use one or two 
-partitions.
+* The ISO folder has been moved from `/boot/iso/` to just `/iso/`, so that it's
+easier to find, and also is in the same location whether you use one or two partitions.
 
+* Glim now supports booting Windows (x64) 10+ Setup or PreinstallEnvironment from separate NTFS partitions.
 
-Requirements
-------------
+* Since vast majority of ISOs are uniquely named, only openbsd and calculate ISOs
+should be placed in their respective directories. The rest of the ISOs are expected to reside in `/iso/`.
+
+Requirements / Layout
+---
 
 You need a USB memory stick (or external hard drive!) partitioned & formatted 
 one of the following ways:
@@ -57,15 +64,52 @@ one of the following ways:
 1. A single partition formatted as FAT32 with the filesystem label `GLIM`. 
 It doesn't matter if it uses MBR or GPT.
 
-or
+2. Two partitions. The small first partition must be formatted as FAT32 with
+the filesystem label `GLIM` and recommended size of 32MB (actual GLIM size is only 12MB).
+The second partition should be formatted as Ext4 with the filesystem label `GLIMISO`.
+It's best if the USB stick uses MBR, but if it uses GPT (as GNOME's Disks utility does) then
+GRUB only supports installing for EFI (not BIOS) - unless you add a third BIOS Boot partition.
+GLIM needs the BIOS Boot partition to come after the other two partitions.
 
-2. Two partitions.  The small first partition must be formatted as FAT32 with 
-the filesystem label `GLIM`, I suggest 100MB in size.  The second partition 
-should be formatted as Ext4 with the filesystem label `GLIMISO`.  It's best if 
-the USB stick uses MBR, but if it uses GPT (as GNOME's Disks utility does) then 
-GRUB only supports installing for EFI (not BIOS) - unless you add a third BIOS 
-Boot partition.  GLIM needs the BIOS Boot partition to come after the other two 
-partitions.
+3. Optionally you can add more paritions. For example:
+ * Add generic partition for file transfers. It is recommended to format it as ExFAT.
+ * Add LUKS/Ext4 parition to use with Linux LiveDVDs and Tails.
+   To trick Tails to use this partition as Persistent storage:
+    1. Name the LUKS container and the ext4 partition as "TailData"
+    2. Change partitiontype to "Linux Reserved"
+    3. Create folders: `dont-ask-again`, `Persistent/Tor Browser` owned by user 1000:1000
+    4. Add `/home/amnesia/Persistent	source=Persistent` to persistence.conf owned by user 115:122
+    Note:
+     You might see a harmless warning regarding failed Persistent storage upgrade.
+     It happens because Tails assumes the Tails image is directly on the USB drive
+     when Persistent storage is available.
+ * Add Windows Setup/PE paritions formated as NTFS and containing ISO content
+   of your favorite Windows or LiveCD.
+   You can also place autounattend.xml on those partitions if you want to allow customizations.
+   Good starting point for create such customizations is here: https://schneegans.de/windows/unattend-generator/
+   Boot menu option will be added for each detected instance.
+
+   Note:
+    If you want to be able to mount one of the partitions on Android/Windows
+    it is recommended to format it as FAT32 or ExFAT and place it as first prtition.
+    To do that you need to toggle CHECK_ORDER variable in glim.sh during installation.
+    Also it is recommended to mark the (GLIM/EFI) partition as "system" to hide it.
+    Other partition might result in harmless warnings they are not supported by other OSs.
+
+    Here is an example of a recommended disk layout that covers all supported functionality:
+
+```
+Disk /dev/sda: 124GB
+Sector size (logical/physical): 512B/512B
+Partition Table: gpt
+Number  Start   End     Size    File system  Name       Flags             Purpose
+1      1049kB  64.4GB  64.4GB  exfat        GLIMXFAT   msftdata          [Generic file storage accesible on Linux/Windows/Andoird/MacOS]
+3      64.4GB  98.8GB  34.4GB  ext4         GLIMISO                      [ISO storage and Generic Storage for Linux]
+4      98.8GB  107GB   8594MB  luks+ext4    TailsData                    [Encrypted Persistent Storage for Tails]
+5      107GB   116GB   8403MB  ntfs         GLIMWIN11  msftdata          [Windows 11 Setup]
+6      116GB   124GB   8401MB  ntfs         GLIMWINPE  msftdata          [Windows PE (HBCD)]
+2      124GB   124GB   33.6MB  fat16        GLIM       boot, hidden, esp [GLIM boot partition]
+```
 
 See the link below for details on how to create a BIOS Boot partition:
 
@@ -78,21 +122,21 @@ Disks utility, without resorting to the terminal!
 
 
 Installation
-------------
+---
 
 Mount the GLIM partition (and the GLIMISO partition if present) on your USB 
 memory stick (or external hard drive).
 
 Then clone the git repository (or use Code > Download ZIP before unzipping it), 
 and just run the script (as a normal user) :
-
-    ./glim.sh
+```./glim.sh```
 
 Once finished, you may change the filesystem label to anything you like. 
-The script will have created an `iso` folder, inside of which you will see an 
-empty folder for each supported Linux distro.
+The script will have created an `/iso/` folder, inside of which you will see
+a few empty folders for distributions with oddly named ISOs.
+The rest if ISOs can be placed directly in `/iso` folder.
 
-The supported `iso` sub-directories (in alphabetical order) are :
+The supported ISOs (in alphabetical order) are:
 
 [//]: # (distro-list-start)
 
@@ -140,14 +184,15 @@ The supported `iso` sub-directories (in alphabetical order) are :
 
 [//]: # (distro-list-end)
 
-Any unpopulated directory will have the matching boot menu entry automatically
-hidden, so to skip any distribution, just don't copy any files into it.
+Any unpopulated/unsupported folder and unsupported ISOs will be ignored.
+To disable any ISO just move it to unsupported folder or add one or more charachters
+in the beginning of its filename.
 
-Download the right ISO image(s) to the matching directory. If you require
+Download the right ISO image(s) to the `/iso/` or dedicated directory. If you require
 boot parameter tweaks, edit the appropriate `boot/grub2/inc-*.cfg` file.
 
 Items order in the menu
------------------------
+---
 
 Menu items for a distro are ordered by modification time of the iso files
 starting from the most recent ones. If some iso files have the same mtime, their
@@ -156,12 +201,12 @@ menu items are ordered alphabetically.
 Here is a generic idea how to keep it nicely ordered when you have multiple
 releases of some distro:
 
-- touch your **release** iso files with the release date
-- touch your **point release** iso files with the original release date plus a
+* touch your **release** iso files with the release date
+* touch your **point release** iso files with the original release date plus a
   day per point. This is a way to ensure point releases never pop above the next
   release like Debian 10.13.0 (released 10 Sep 2022) would still be below Debian
   11.0.0 (released 14 August 2021)
-- in case there are multiple flavours of some iso but the version is the same,
+* in case there are multiple flavours of some iso but the version is the same,
   touch all of them with the same date for the whole group to be ordered
   alphabetically
 
@@ -180,7 +225,7 @@ Sample ordered menu:
 | Debian Live 9.13.0 amd64 standard  | 17 June 2017 + 13 days  |
 
 Special Cases
--------------
+---
 
 ### iPXE
 
@@ -225,7 +270,7 @@ Some Ubuntu flavours also bundle the Nvidia driver (like Kubuntu), some don't
 
 
 Testing
--------
+---
 
 With KVM it should "just work". The `/dev/sdx` device should be configured as
 an IDE or SATA disk (for some reason, as USB disk didn't work for me on Fedora
@@ -237,7 +282,7 @@ firmwares.
 
 
 Troubleshooting
----------------
+---
 
 If you have any problem to boot, for instance stuck at the GRUB prompt before
 the menu, try re-installing.
@@ -247,7 +292,7 @@ I've seen weird things happen...
 
 
 Contributing
-------------
+---
 
 If you find GLIM useful but the configuration of the OS you require is missing
 or simply outdated, please feel free to contribute! What you will need is to
@@ -262,10 +307,12 @@ create a GitHub pull request which includes :
  * An updated supported directories list in this README file.
 
 
+Credits
 ---
-Copyleft 2012-2023 Matthias Saou http://matthias.saou.eu/
 
-Copyleft 2025 Chris Handley https://github.com/cshandley-uk
+* Copyleft 2012-2023 Matthias Saou http://matthias.saou.eu/
+* Copyleft 2025 Chris Handley https://github.com/cshandley-uk
+* Copyleft 2025 Eugene Sanivsky (eugenesan) https://github.com/eugenesan
 
 All configuration files included are public domain. Do what you want with them.
 The invader logo was made by me, so unless the exact shape is covered by
@@ -273,4 +320,3 @@ copyright somewhere, do what you want with it.
 The background is "Wallpaper grey" © 2008 payalnic (DeviantArt)
 The `ascii.pf2` font comes from GRUB, which is GPLv3+ licensed. For more
 details as well as the source code, see http://www.gnu.org/software/grub/
-
