@@ -2,7 +2,8 @@ GRUB2 Live ISO Multiboot
 ========================
 
 This version: https://github.com/cshandley-uk/bash_glim
-Forked from:  https://github.com/thias/glim | http://glee.thias.es/GLIM
+
+Forked from:  https://github.com/thias/glim | https://glee.thias.es/GLIM
 
 
 Overview
