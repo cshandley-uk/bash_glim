@@ -28,8 +28,8 @@ supports a second partition using other filesystems supported by GRUB2, such as
 ext3/ext4, NTFS or exFAT - but the distribution must also support booting from 
 it, which isn't the case for many with NTFS (Ubuntu does, Fedora doesn't) and 
 exFAT (Ubuntu doesn't, Fedora does).  Ext4 is a safe bet for the second 
-partition.
-
+partition.  To support legacy BIOS & EFI hybrid, make sure your device is 
+partitioned with MBR (not GPT).
 
 Screenshots
 -----------
@@ -80,8 +80,8 @@ GUID `21686148-6449-6E6F-744E-656564454649`).  You can do this with GNOME's
 Disks utility, without resorting to the terminal!
 
 Alternatively you can try using `format_empty_disk.sh`, my experimental new 
-script which will ask you a few questions before before setting-up an empty 
-disk with GLIM's recommended two partition set-up (plus a BIOS Boot partition), 
+script which will ask you a few questions before before setting-up an empty disk 
+with GLIM's recommended two partition GPT set-up (plus a BIOS Boot partition), 
 ready to use with `glim.sh` itself.  I've tried to make it safe, so for example 
 it shouldn't delete any partitions, only create new ones... And in the event of 
 any errors, the script should stop rather than risk doing anything wrong. 
