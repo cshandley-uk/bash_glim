@@ -4,7 +4,7 @@
 #
 
 # Check that we are *NOT* running as root
-if [[ `id -u` -eq 0 ]]; then
+if [[ $(id -u) -eq 0 ]]; then
   echo "ERROR: Don't run as root, use a user with full sudo access."
   exit 1
 fi
@@ -35,7 +35,7 @@ if [[ -z "$GRUB2_INSTALL" ]]; then
 fi
 
 # Sanity check : Our GRUB2 configuration
-GRUB2_CONF="`dirname $0`/grub2"
+GRUB2_CONF="$(dirname "$0")/grub2"
 if [[ ! -f ${GRUB2_CONF}/grub.cfg ]]; then
   echo "ERROR: grub2/grub.cfg to use not found."
   exit 1
@@ -50,7 +50,7 @@ if ! which blkid &>/dev/null; then
   echo "ERROR: blkid command not found."
   exit 1
 fi
-USBDEV1=`blkid -L GLIM`
+USBDEV1=$(blkid -L GLIM)
 
 # Sanity check : we found one partition to use with matching label
 if [[ -z "$USBDEV1" ]]; then
@@ -69,19 +69,19 @@ if [[ ! -b "$USBDEV" ]]; then
   exit 1
 fi
 echo "Running fdisk -l ${USBDEV} (with sudo) ..."
-FDisk="$(sudo fdisk -l ${USBDEV})"
-mapfile -t PartOrder < <(echo "$FDisk" | grep -E ^${USBDEV} | sort -nk2,2 | awk '{ print $1 }')
+FDisk="$(sudo fdisk -l "${USBDEV}")"
+mapfile -t PartOrder < <(echo "$FDisk" | grep -E "^${USBDEV}" | sort -nk2,2 | awk '{ print $1 }')
 if [[ "${USBDEV1}" != "${PartOrder[0]}" ]]; then
   echo "ERROR: $USBDEV1 is not the first partition on the block device."
   exit 1
 fi
 echo "Found block device where to install GRUB2 : ${USBDEV}"
-if [[ `ls -1 ${USBDEV}* | wc -l` -gt 3 ]]; then
+if [[ $(find "$(dirname "${USBDEV}")" -wholename "${USBDEV}*" | wc -l) -gt 3 ]]; then
   echo "WARNING: There are more than two partitions on ${USBDEV}"
 fi
 
 # Look for second partition
-USBDEV2=`blkid -L GLIMISO`
+USBDEV2=$(blkid -L GLIMISO)
 if [[ -z "$USBDEV2" ]]; then
   echo "Did NOT find a second partition with label 'GLIMISO', so assuming ISO files will be stored on the main 'GLIM' partition."
 elif [[ "$(echo "$USBDEV2" | wc -l)" -gt 1 ]]; then
@@ -97,11 +97,11 @@ else
 fi
 
 # Sanity check : our GLIM partition is mounted
-if ! grep -q -w ${USBDEV1} /proc/mounts; then
+if ! grep -q -w "${USBDEV1}" /proc/mounts; then
   echo "ERROR: ${USBDEV1} isn't mounted"
   exit 1
 fi
-USBMNT="$(grep -w ${USBDEV1} /proc/mounts | cut -d ' ' -f 2)"
+USBMNT="$(grep -w "${USBDEV1}" /proc/mounts | cut -d ' ' -f 2)"
 if [[ -z "$USBMNT" ]]; then
   echo "ERROR: Couldn't find mount point for ${USBDEV1}"
   exit 1
@@ -113,11 +113,11 @@ if [[ -z "$USBDEV2" ]]; then
   # (no second partition for ISOs)
   USBMNTISO="${USBMNT}"
 else
-  if ! grep -q -w ${USBDEV2} /proc/mounts; then
+  if ! grep -q -w "${USBDEV2}" /proc/mounts; then
     echo "ERROR: ${USBDEV2} isn't mounted"
     exit 1
   fi
-  USBMNTISO="$(grep -w ${USBDEV2} /proc/mounts | cut -d ' ' -f 2)"
+  USBMNTISO="$(grep -w "${USBDEV2}" /proc/mounts | cut -d ' ' -f 2)"
   if [[ -z "$USBMNTISO" ]]; then
     echo "ERROR: Couldn't find mount point for ${USBDEV2}"
     exit 1
@@ -135,8 +135,7 @@ else
 fi
 
 # Check disk's partition table type
-PartType="$(echo "$FDisk" | grep -iPo "Disklabel type:\s\K.*")"
-if [[ $? -ne 0 ]]; then
+if ! PartType="$(echo "$FDisk" | grep -iPo "Disklabel type:\s\K.*")"; then
   PartType="dos"	# Error, so assume the best case so don't give spurious warnings
 elif [[ "$PartType" == "gpt" ]]; then
   echo "The ${USBDEV} block device uses GPT, which means you can only install for EFI (not BIOS) unless it has a 1MB BIOS Boot partition for Grub.  GLIM needs this after the GLIMISO partition (if there is one)."
@@ -151,18 +150,18 @@ fi
 
 if [[ $BIOS == true ]]; then
   # Set the target
-  read -n 1 -s -p "Install for EFI? (Y/n) " EFI
+  read -r -n 1 -s -p "Install for EFI? (Y/n) " EFI
   if [[ "$EFI" == "n" || "$EFI" == "N" ]]; then
     EFI=false
     echo "n"
   else
     EFI=true
     echo "y"
-    
+
     if [[ "$PartType" == "gpt" ]]; then
       BiosBootPartWarning="(Grub needs a BIOS Boot Partition) "
     fi
-    read -n 1 -s -p "Also install for standard BIOS? $BiosBootPartWarning(y/N) " BIOS
+    read -r -n 1 -s -p "Also install for standard BIOS? $BiosBootPartWarning(y/N) " BIOS
     if [[ "$BIOS" == "y" || "$BIOS" == "Y" ]]; then
       BIOS=true
       echo "y"
@@ -190,7 +189,7 @@ fi
 
 # Sanity check : human will read the info and confirm
 echo ""
-read -n 1 -s -p "Ready to install GLIM. Continue? (y/N) " PROCEED
+read -r -n 1 -s -p "Ready to install GLIM. Continue? (y/N) " PROCEED
 if [[ "$PROCEED" == "y" || "$PROCEED" == "Y" ]]; then
   echo "y"
 else
@@ -202,8 +201,7 @@ fi
 if [[ $BIOS == true ]]; then
   GRUB_TARGET="--target=i386-pc"
   echo "Running ${GRUB2_INSTALL} ${GRUB_TARGET} --boot-directory '${USBMNT}/boot' ${USBDEV} (with sudo) ..."
-  sudo          ${GRUB2_INSTALL} ${GRUB_TARGET} --boot-directory "${USBMNT}/boot" ${USBDEV}
-  if [[ $? -ne 0 ]]; then
+  if ! sudo          "${GRUB2_INSTALL}" "${GRUB_TARGET}" --boot-directory "${USBMNT}/boot" "${USBDEV}"; then
       echo "ERROR: ${GRUB2_INSTALL} returned with an error exit status."
       exit 1
   fi
@@ -211,8 +209,7 @@ fi
 if [[ $EFI == true ]]; then
   GRUB_TARGET="--target=x86_64-efi --removable --no-nvram"
   echo "Running ${GRUB2_INSTALL} ${GRUB_TARGET} --efi-directory '${USBMNT}' --boot-directory '${USBMNT}/boot' ${USBDEV} (with sudo) ..."
-  sudo          ${GRUB2_INSTALL} ${GRUB_TARGET} --efi-directory "${USBMNT}" --boot-directory "${USBMNT}/boot" ${USBDEV}
-  if [[ $? -ne 0 ]]; then
+  if ! sudo          "${GRUB2_INSTALL}" ${GRUB_TARGET} --efi-directory "${USBMNT}" --boot-directory "${USBMNT}/boot" "${USBDEV}"; then
     echo "ERROR: ${GRUB2_INSTALL} returned with an error exit status."
     exit 1
   fi
@@ -236,8 +233,7 @@ fi
 
 # Copy GRUB2 configuration
 echo "Running rsync -rt $CMD_CHOWN --delete --exclude=i386-pc --exclude=x86_64-efi --exclude=fonts -- ${GRUB2_CONF}/ '${USBMNT}/boot/${GRUB2_DIR}' ..."
-${CMD_PREFIX} rsync -rt $CMD_CHOWN --delete --exclude=i386-pc --exclude=x86_64-efi --exclude=fonts -- ${GRUB2_CONF}/ "${USBMNT}/boot/${GRUB2_DIR}"
-if [[ $? -ne 0 ]]; then
+if ! ${CMD_PREFIX} rsync -rt $CMD_CHOWN --delete --exclude=i386-pc --exclude=x86_64-efi --exclude=fonts -- "${GRUB2_CONF}/" "${USBMNT}/boot/${GRUB2_DIR}"; then
   echo "ERROR: the rsync copy returned with an error exit status."
   exit 1
 fi
@@ -262,9 +258,9 @@ for DIR in $(sed "${args[@]}" "$(dirname "$0")"/README.md); do
 done
 
 echo "Copying readme to GLIM partitions ..."
-${CMD_PREFIX} cp -v "$(dirname $0)/README.md" "${USBMNT}/glim-readme.txt"
+${CMD_PREFIX} cp -v "$(dirname "$0")/README.md" "${USBMNT}/glim-readme.txt"
 if [[ "$USBMNTISO" != "$USBMNT" ]]; then
-  ${ISOCMD_PREFIX} cp -v "$(dirname $0)/README.md" "${USBMNTISO}/glim-readme.txt"
+  ${ISOCMD_PREFIX} cp -v "$(dirname "$0")/README.md" "${USBMNTISO}/glim-readme.txt"
 fi
 
 echo "Finished!"
