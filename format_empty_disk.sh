@@ -4,7 +4,7 @@ set -e		# exit on error
 #set -x		# print commands being executed
 
 for Cmd in fdisk lsblk sgdisk blockdev partprobe; do
-	if [ -z "$(which $Cmd | cat)" ]; then
+	if ! command -v "$Cmd"; then
 		echo "ERROR: This script needs the '$Cmd' command, please install it."
 		exit 1
 	fi
@@ -19,7 +19,7 @@ echo "WARNING: This script will format a chosen empty hard disk with GLIM's reco
 echo ""
 echo 'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.'
 echo ""
-read -p "If you have read, understood & fully accepted the above, then please enter 'yes' in capitals: " Ans
+read -r -p "If you have read, understood & fully accepted the above, then please enter 'yes' in capitals: " Ans
 if [ "$Ans" != "YES" ]; then
 	echo "Script cancelled by user."
 	exit 0
@@ -27,7 +27,7 @@ fi
 echo ""
 
 # Specify disk to overwrite
-read -p "Please enter path of disk to overwrite: " Disk
+read -r -p "Please enter path of disk to overwrite: " Disk
 if [ -z "$Disk" ]; then echo "Script cancelled by user."; exit 0; fi
 echo ""
 
@@ -37,7 +37,7 @@ echo ""
 #	exit 1
 #fi
 Devices="$(lsblk -o name -lpn --nodeps -e7)"
-if [ -z "$(echo "$Devices" | grep "^${Disk}$")" ]; then
+if ! echo "$Devices" | grep -q "^${Disk}$"; then
 	echo "ERROR: '$Disk' is not a known block device:"
 	echo "$Devices"
 	exit 1
@@ -57,7 +57,7 @@ fi
 
 # Check that disk has no partitions
 set -x
-Partitions="$(sudo fdisk -l $Disk | sed '1,/^$/d')"
+Partitions="$(sudo fdisk -l "$Disk" | sed '1,/^$/d')"
 set +x
 if [ "$(echo "$Partitions" | wc -l)" -gt 1 ]; then
 	echo "ERROR: $Disk is not empty, it has partitions:"
@@ -66,9 +66,9 @@ if [ "$(echo "$Partitions" | wc -l)" -gt 1 ]; then
 fi
 
 # Confirm using the correct disk
-sudo sgdisk --print $Disk
+sudo sgdisk --print "$Disk"
 echo ""
-read -p "Is this the correct disk to overwrite? [y/N] " Ans
+read -r -p "Is this the correct disk to overwrite? [y/N] " Ans
 if [[ "$Ans" != "y" && "$Ans" != "Y" ]]; then echo "Script cancelled by user."; exit 1; fi
 echo ""
 
@@ -76,37 +76,37 @@ echo ""
 trap "echo 'ERROR: Script did not finished partitioning.'" EXIT
 set -x
 #sudo sgdisk --zap-all $Disk	# erase any existing partition information from HD
-sudo sgdisk --mbrtogpt $Disk	# use GPT not MBR
+sudo sgdisk --mbrtogpt "$Disk"	# use GPT not MBR
 #sudo sgdisk --clear $Disk		# wipe any previous partition
 #sudo partprobe $Disk			# request the OS re-reads the partition table
-sudo blockdev --rereadpt $Disk	# request the OS re-reads the partition table', and errors if a partition is already mounted on the disk
+sudo blockdev --rereadpt "$Disk"	# request the OS re-reads the partition table', and errors if a partition is already mounted on the disk
 
-sudo sgdisk --new=1:0:+$GlimSize $Disk # use first 100MB
-sudo sgdisk --new=3:-${BiosBootSize}:0 --typecode=3:ef02 --partition-guid=3:21686148-6449-6E6F-744E-656564454649 $Disk # use last 1MB for BIOS Boot partition needed by GRUB
-sudo sgdisk --new=2:0:0 $Disk # use rest of space
+sudo sgdisk --new=1:0:+"$GlimSize" "$Disk" # use first 100MB
+sudo sgdisk --new=3:-"${BiosBootSize}":0 --typecode=3:ef02 --partition-guid=3:21686148-6449-6E6F-744E-656564454649 "$Disk" # use last 1MB for BIOS Boot partition needed by GRUB
+sudo sgdisk --new=2:0:0 "$Disk" # use rest of space
 #sudo sgdisk --typecode=1:8300 --typecode=2:8300 $Disk
 #sudo sgdisk --change-name=1:GLIM $Disk	# This is just a human-readable label, displayed by --print under the Name column
 #sudo sgdisk --change-name=2:GLIMISO $Disk
-sudo sgdisk --change-name=3:"BIOS Boot" $Disk
-sudo partprobe $Disk	# ensure kernel is using the new partition table, before we format partitions
+sudo sgdisk --change-name=3:"BIOS Boot" "$Disk"
+sudo partprobe "$Disk"	# ensure kernel is using the new partition table, before we format partitions
 set +x
 
 echo "Waiting a few seconds... "
 sleep 2		# give OS time to auto-mount new partitions, if they happened to start at same location as a previously-deleted partition
-sudo umount ${Disk}1 2>/dev/null | cat
-sudo umount ${Disk}2 2>/dev/null | cat
-sudo umount ${Disk}3 2>/dev/null | cat
+sudo umount "${Disk}"1 2>/dev/null || true
+sudo umount "${Disk}"2 2>/dev/null || true
+sudo umount "${Disk}"3 2>/dev/null || true
 
 # Format partitions
 trap "echo 'ERROR: Script did not finished formatting.'" EXIT
 set -x
-sudo mkfs.fat -F 32 -n GLIM ${Disk}1
-sudo mkfs.ext4 -L GLIMISO ${Disk}2
+sudo mkfs.fat -F 32 -n GLIM "${Disk}"1
+sudo mkfs.ext4 -L GLIMISO "${Disk}"2
 set +x
 
 # Try to get OS to mount new partitions
 sleep 1
-sudo partprobe $Disk
+sudo partprobe "$Disk"
 #sudo blockdev --rereadpt $Disk
 
 # Report success
